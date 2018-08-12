@@ -19,6 +19,25 @@ enum RenameStatus {
 }
 
 impl Renaming {
+    pub fn new(dir: &str, editor: &str, filter_dirs: bool) -> Renaming {
+        Renaming {
+            dir: dir.to_owned(),
+            editor: editor.to_owned(),
+            filter_dirs: filter_dirs,
+            is_demo: false,
+        }
+    }
+
+    pub fn filter_dirs(&mut self, filter: bool) -> &mut Renaming {
+        self.filter_dirs = filter;
+        self
+    }
+
+    pub fn demo(&mut self, demo: bool) -> &mut Renaming {
+        self.is_demo = demo;
+        self
+    }
+
     pub fn rename_files(&self) -> i32 {
         let files = self.files_in_dir();
         let temp_file = self.write_temp_file(&files);

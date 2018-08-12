@@ -15,17 +15,7 @@ fn main() {
     let dir = &args[1];
     let editor = if args.len() == 3 { &args[2] } else { "vim" };
 
-    println!("Renaming in {} using editor {}", dir, editor);
-
-    let renaming = rename::Renaming {
-        dir: dir.to_owned(),
-        editor: editor.to_owned(),
-        filter_dirs: true,
-        is_demo: true,
-    };
-
+    let renaming = rename::Renaming::new(dir, editor, true);
     let count = renaming.rename_files();
     println!("Renamed {} files", count)
-
-    // show_dir(&dir);
 }
