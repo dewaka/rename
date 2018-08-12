@@ -44,10 +44,9 @@ impl Renaming {
 
         let ok = self.open_file_with_editor(temp_file.path().to_str().unwrap(), &self.editor);
 
-        if ok {
-            println!("Yeah!")
-        } else {
-            println!("Something went wrong!")
+        if !ok {
+            println!("Something went wrong!");
+            return 0;
         }
 
         let modified_files = self.read_files_from_file(temp_file.path());
@@ -89,21 +88,26 @@ impl Renaming {
         files
     }
 
+    // TODO: We need to make this a result
     fn files_in_dir(&self) -> Vec<String> {
         use std::fs::metadata;
 
         let mut files: Vec<String> = vec![];
 
-        let paths = fs::read_dir(&self.dir).unwrap();
-        for path in paths {
-            let file = path.unwrap().file_name().to_str().unwrap().to_owned();
+        let re_paths = fs::read_dir(path::PathBuf::from(&self.dir));
+        match re_paths {
+            Ok(paths) =>
+                for path in paths {
+                    let file = path.unwrap().file_name().to_str().unwrap().to_owned();
 
-            let md = metadata(&file).unwrap();
-            if md.is_file() {
-                files.push(file);
-            } else if !self.filter_dirs {
-                files.push(file);
-            }
+                    let md = metadata(&file).unwrap();
+                    if md.is_file() {
+                        files.push(file);
+                    } else if !self.filter_dirs {
+                        files.push(file);
+                    }
+                },
+            Err(e) => println!("{:?}", e),
         }
 
         return files;
@@ -113,17 +117,17 @@ impl Renaming {
         use std::process::{Command, ExitStatus};
 
         let editor_cmd = format!("{} {}", editor, file);
-        println!("Editor command: {}", editor_cmd);
+        if self.is_demo {
+            println!("Editor command: {}", editor_cmd);
+        }
 
         let mut cmd = Command::new(editor);
-
         let mut exit_status: Option<ExitStatus> = Option::None;
 
         if let Ok(mut child) = cmd.arg(file).spawn() {
             exit_status = Some(child.wait().expect("Failed to execute command"));
-            println!("Done with command")
         } else {
-            println!("Command didn't start")
+            println!("Error - failed to run: {}", editor_cmd);
         }
 
         if let Some(status) = exit_status {
