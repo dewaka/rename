@@ -1,7 +1,7 @@
 extern crate tempfile;
 
 use std::fs;
-use std::fs::File;
+use std::fs::{File, metadata};
 use std::io::{Read, Write};
 use std::path;
 
@@ -12,10 +12,11 @@ pub struct Renaming {
     pub is_demo: bool,
 }
 
-enum RenameStatus {
-    Error,
-    Same,
-    Success,
+#[derive(Debug)]
+struct Rename {
+    from: String,
+    to: String,
+    is_dir: bool,
 }
 
 impl Renaming {
@@ -23,7 +24,7 @@ impl Renaming {
         Renaming {
             dir: dir.to_owned(),
             editor: editor.to_owned(),
-            filter_dirs: filter_dirs,
+            filter_dirs,
             is_demo: false,
         }
     }
@@ -113,6 +114,7 @@ impl Renaming {
         return files;
     }
 
+    // TODO: Add better error handling
     fn open_file_with_editor(&self, file: &str, editor: &str) -> bool {
         use std::process::{Command, ExitStatus};
 
@@ -137,44 +139,71 @@ impl Renaming {
         }
     }
 
-    fn rename_file(&self, orig: &String, rname: &String) -> RenameStatus {
-        if orig.eq(rname) {
-            RenameStatus::Same
-        } else {
-            if self.is_demo {
-                println!("{} -> {}", orig, rname);
+    fn rename_files_to(&self, froms: &Vec<String>, tos: &Vec<String>) -> i32 {
+        if froms.len() != tos.len() {
+            println!("Error: renamed files does not match original files in length");
+            return 0;
+        }
 
-                RenameStatus::Success
-            } else {
-                let status = fs::rename(orig, rname);
-                if status.is_ok() {
-                    RenameStatus::Success
-                } else {
-                    RenameStatus::Error
-                }
+        let mut renames: Vec<Rename> = vec![];
+        for (from, to) in froms.iter().zip(tos.iter()) {
+            if let Some(rename) = Rename::rename_for(from, to) {
+                renames.push(rename);
             }
+        }
+
+        Rename::do_bulk_rename(&renames, false, self.is_demo)
+    }
+}
+
+impl Rename {
+    fn do_rename(&self, is_demo: bool) -> bool {
+        if is_demo {
+            println!("{} -> {}", self.from, self.to);
+            true
+        } else {
+            let status = fs::rename(&self.from, &self.to);
+            status.is_ok()
         }
     }
 
-    fn rename_files_to(&self, orig: &Vec<String>, rnames: &Vec<String>) -> i32 {
+    // TODO: We need to be smarter about bulk renames
+    // Some renames might have to be done earlier than others because when
+    // directory renames are involved, there can be later dependencies later on for those
+    fn do_bulk_rename(renames: &Vec<Rename>, _early_exit: bool, is_demo: bool) -> i32 {
         let mut count = 0;
 
-        if orig.len() != rnames.len() {
-            println!("Error: renamed files does not match original files in length");
-            return count;
-        }
-
-        for i in 0..orig.len() {
-            let original = &orig[i];
-            let new_name = &rnames[i];
-
-            match self.rename_file(&original, &new_name) {
-                RenameStatus::Success => count += 1,
-                RenameStatus::Error => println!("Rename failed for: {} to {}", original, new_name),
-                RenameStatus::Same => (),
+        for rename in renames {
+            let ok = rename.do_rename(is_demo);
+            if ok {
+                count += 1;
+            } else {
+                println!("Failed to rename: {:?}", rename);
             }
         }
 
         count
+    }
+
+    fn rename_for(from: &str, to: &str) -> Option<Rename> {
+        if from.eq(to) {
+            Option::None
+        } else {
+            match metadata(from) {
+                Ok(md) => {
+                    let rename = Rename {
+                        from: from.to_owned(),
+                        to: to.to_owned(),
+                        is_dir: md.is_dir(),
+                    };
+
+                    Some(rename)
+                },
+                Err(_) => {
+                    println!("Error requesting metadata: {}", from);
+                    Option::None
+                },
+            }
+        }
     }
 }
