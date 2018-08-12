@@ -1,0 +1,7 @@
+[package]
+name = "rname"
+version = "0.1.0"
+authors = ["Chathura Colombage <dcdewaka@gmail.com>"]
+
+[dependencies]
+tempfile = "2.2.0"
