@@ -18,7 +18,7 @@ fn main() {
                 .required(false)
                 .takes_value(true)
                 .multiple(false)
-                .help("Specify the renaming mode - directory, left or diff"),
+                .help("Specify the renaming mode - directory, stdin, left or diff"),
         )
         .arg(
             Arg::with_name("left")
@@ -69,23 +69,35 @@ fn main() {
     let include_dirs = matches.occurrences_of("include-dirs") > 0;
 
     let renaming = match mode {
-        "left" => Some(app::RenameOp::from_left(left.unwrap(), editor, false)),
-        "compare" => Some(app::RenameOp::from_compare(
-            left.unwrap(),
-            right.unwrap(),
-            false,
-        )),
-        "dir" => Some(app::RenameOp::from_dir(
-            dir.unwrap(),
-            editor,
-            !include_dirs,
-            false,
-        )),
-        _ => Option::None,
+        "left" =>
+            if left.is_some() {
+                Some(app::RenameOp::from_left(left.unwrap(), editor, false))
+            } else {
+                println!("Left file arg is required for left mode");
+                Option::None
+            },
+        "compare" =>
+            if left.is_some() && right.is_some() {
+                Some(app::RenameOp::from_compare(left.unwrap(), right.unwrap(), false))
+            } else {
+                println!("Left file and right file args are required for compare mode");
+                Option::None
+            },
+        "dir" =>
+            if dir.is_some() {
+                Some(app::RenameOp::from_dir(dir.unwrap(), editor, !include_dirs, false))
+            } else {
+                println!("Directory argument required for dir mode");
+                Option::None
+            },
+        "input" => Some(app::RenameOp::from_stdin(editor, false)),
+        _ => {
+            println!("Unexpected mode: {}", mode);
+            Option::None
+        },
     };
 
     if renaming.is_none() {
-        println!("Unexpected mode: {}", mode);
         return;
     }
 

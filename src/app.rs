@@ -1,9 +1,9 @@
 extern crate tempfile;
 
-use std::fs;
-use std::fs::File;
-use std::io::{Read, Write};
 use std::path;
+use std::fs::{self, File};
+use std::io::{self, BufRead, Read, Write};
+
 use rename;
 
 enum RenameType {
@@ -14,6 +14,9 @@ enum RenameType {
     },
     LeftFile {
         file: String,
+        editor: String,
+    },
+    StdinInput {
         editor: String,
     },
     FileCompare {
@@ -32,6 +35,13 @@ impl RenameOp {
         RenameOp {
             is_demo,
             rename_type: RenameType::Directory { dir: dir.to_string(), editor: editor.to_string(), filter_dirs },
+        }
+    }
+
+    pub fn from_stdin(editor: &str, is_demo: bool) -> RenameOp {
+        RenameOp {
+            is_demo,
+            rename_type: RenameType::StdinInput { editor: editor.to_string() }
         }
     }
 
@@ -104,7 +114,7 @@ impl RenameOp {
         }
     }
 
-    fn from_editor(&self, froms: &Vec<String>, editor: &str, tos: &mut Vec<String>) {
+    fn read_from_editor(&self, froms: &Vec<String>, editor: &str, tos: &mut Vec<String>) {
         let temp_file = self.write_temp_file(&froms);
         let ok = self.open_file_with_editor(temp_file.path().to_str().unwrap(), editor);
 
@@ -113,10 +123,10 @@ impl RenameOp {
             return;
         }
 
-        self.from_file(temp_file.path().to_str().unwrap(), tos);
+        self.read_from_file(temp_file.path().to_str().unwrap(), tos);
     }
 
-    fn from_file(&self, file: &str, contents: &mut Vec<String>) {
+    fn read_from_file(&self, file: &str, contents: &mut Vec<String>) {
         let mut f = File::open(file).expect("file not found");
 
         let mut lines = String::new();
@@ -130,6 +140,18 @@ impl RenameOp {
         }
     }
 
+    fn read_from_stdin(&self, contents: &mut Vec<String>) {
+        let stdin = io::stdin();
+        for line in stdin.lock().lines() {
+            let file = line.unwrap();
+            if file.is_empty() {
+                break;
+            } else {
+                contents.push(file);
+            }
+        }
+    }
+
     pub fn rename(&self) -> i32 {
         let mut froms: Vec<String> = vec![];
         let mut tos: Vec<String> = vec![];
@@ -137,15 +159,19 @@ impl RenameOp {
         match self.rename_type {
             RenameType::Directory { ref dir, ref editor, filter_dirs } => {
                 self.directory_contents(&dir, &mut froms, filter_dirs);
-                self.from_editor(&froms, &editor, &mut tos);
+                self.read_from_editor(&froms, &editor, &mut tos);
             }
             RenameType::LeftFile { ref file, ref editor } => {
-                self.from_file(&file, &mut froms);
-                self.from_editor(&froms, &editor, &mut tos);
+                self.read_from_file(&file, &mut froms);
+                self.read_from_editor(&froms, &editor, &mut tos);
             }
             RenameType::FileCompare { ref left, ref right } => {
-                self.from_file(&left, &mut froms);
-                self.from_file(&right, &mut tos);
+                self.read_from_file(&left, &mut froms);
+                self.read_from_file(&right, &mut tos);
+            }
+            RenameType::StdinInput { ref editor } => {
+                self.read_from_stdin(&mut froms);
+                self.read_from_editor(&froms, &editor, &mut tos);
             }
         }
 
