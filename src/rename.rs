@@ -1,16 +1,17 @@
 use std::fs;
 use std::fs::metadata;
 
-pub fn bulk_rename(froms: &Vec<String>, tos: &Vec<String>, is_demo: bool) -> i32 {
+pub fn bulk_rename(froms: &Vec<String>, tos: &Vec<String>, is_demo: bool) -> Result<i32, String> {
     if froms.len() != tos.len() {
-        println!("Error: renamed files does not match original files in length");
-        return 0;
+        return Err("Error: renamed files does not match original files in length".to_string());
     }
 
     let mut renames: Vec<Rename> = vec![];
     for (from, to) in froms.iter().zip(tos.iter()) {
-        if let Some(rename) = Rename::rename_for(from, to) {
-            renames.push(rename);
+        match Rename::rename_for(from, to) {
+            Ok(rename) => renames.push(rename),
+            Err(Some(msg)) => return Err(msg),
+            Err(None) => (),
         }
     }
 
@@ -20,7 +21,7 @@ pub fn bulk_rename(froms: &Vec<String>, tos: &Vec<String>, is_demo: bool) -> i32
 // TODO: We need to be smarter about bulk renames
 // Some renames might have to be done earlier than others because when
 // directory renames are involved, there can be later dependencies later on for those
-fn do_bulk_rename(renames: &Vec<Rename>, _early_exit: bool, is_demo: bool) -> i32 {
+fn do_bulk_rename(renames: &Vec<Rename>, early_exit: bool, is_demo: bool) -> Result<i32, String> {
     let mut count = 0;
 
     for rename in renames {
@@ -28,11 +29,15 @@ fn do_bulk_rename(renames: &Vec<Rename>, _early_exit: bool, is_demo: bool) -> i3
         if ok {
             count += 1;
         } else {
-            println!("Failed to rename: {:?}", rename);
+            if early_exit {
+                return Err(format!("Failed to rename: {:?}", rename));
+            } else {
+                println!("Warning - failed to rename: {:?}", rename);
+            }
         }
     }
 
-    count
+    Ok(count)
 }
 
 #[derive(Debug)]
@@ -54,9 +59,9 @@ impl Rename {
     }
 
 
-    fn rename_for(from: &str, to: &str) -> Option<Rename> {
+    fn rename_for(from: &str, to: &str) -> Result<Rename, Option<String>> {
         if from.eq(to) {
-            Option::None
+            Err(Option::None)
         } else {
             match metadata(from) {
                 Ok(md) => {
@@ -66,11 +71,10 @@ impl Rename {
                         is_dir: md.is_dir(),
                     };
 
-                    Some(rename)
+                    Ok(rename)
                 },
                 Err(_) => {
-                    println!("Error requesting metadata: {}", from);
-                    Option::None
+                    Err(Option::Some(format!("Error requesting metadata: {}", from)))
                 },
             }
         }

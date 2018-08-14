@@ -152,7 +152,7 @@ impl RenameOp {
         }
     }
 
-    pub fn rename(&self) -> i32 {
+    pub fn rename(&self) -> Result<i32, String> {
         let mut froms: Vec<String> = vec![];
         let mut tos: Vec<String> = vec![];
 

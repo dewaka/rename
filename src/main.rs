@@ -6,7 +6,6 @@ mod rename;
 
 use clap::{App, Arg};
 
-// TODO: Add mode to support diff based renames
 fn main() {
     let matches = App::new("rname: bulk rename")
         .version("0.1")
@@ -71,36 +70,42 @@ fn main() {
     let renaming = match mode {
         "left" =>
             if left.is_some() {
-                Some(app::RenameOp::from_left(left.unwrap(), editor, false))
+                Ok(app::RenameOp::from_left(left.unwrap(), editor, false))
             } else {
-                println!("Left file arg is required for left mode");
-                Option::None
+                Err("Left file arg is required for left mode".to_string())
             },
         "compare" =>
             if left.is_some() && right.is_some() {
-                Some(app::RenameOp::from_compare(left.unwrap(), right.unwrap(), false))
+                Ok(app::RenameOp::from_compare(left.unwrap(), right.unwrap(), false))
             } else {
-                println!("Left file and right file args are required for compare mode");
-                Option::None
+                Err("Left file and right file args are required for compare mode".to_string())
             },
         "dir" =>
             if dir.is_some() {
-                Some(app::RenameOp::from_dir(dir.unwrap(), editor, !include_dirs, false))
+                Ok(app::RenameOp::from_dir(dir.unwrap(), editor, !include_dirs, false))
             } else {
-                println!("Directory argument required for dir mode");
-                Option::None
+                Err("Directory argument required for dir mode".to_string())
             },
-        "input" => Some(app::RenameOp::from_stdin(editor, false)),
-        _ => {
-            println!("Unexpected mode: {}", mode);
-            Option::None
-        },
+        "input" => Ok(app::RenameOp::from_stdin(editor, false)),
+        _ => Err(format!("Unexpected mode: {}", mode)),
     };
 
-    if renaming.is_none() {
-        return;
-    }
+    match renaming {
+        Ok(app) => {
+            let result = app.rename();
 
-    let count = renaming.unwrap().rename();
-    println!("Renamed {} files", count)
+            match result {
+                Ok(count) =>
+                    println!("Renamed {} files", count),
+                Err(msg) => {
+                    println!("Error: {}", msg);
+                    std::process::exit(1);
+                },
+            }
+        },
+        Err(msg) => {
+            println!("{}", msg);
+            std::process::exit(1);
+        }
+    }
 }
