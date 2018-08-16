@@ -1,5 +1,6 @@
-use std::fs;
-use std::fs::metadata;
+use std::fs::{self, metadata};
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 
 pub fn bulk_rename(froms: &Vec<String>, tos: &Vec<String>, is_demo: bool) -> Result<i32, String> {
     if froms.len() != tos.len() {
@@ -15,7 +16,36 @@ pub fn bulk_rename(froms: &Vec<String>, tos: &Vec<String>, is_demo: bool) -> Res
         }
     }
 
-    do_bulk_rename(&renames, false, is_demo)
+    if !has_rename_conflicts(&renames) {
+        do_bulk_rename(&renames, false, is_demo)
+    } else {
+        Err("There are rename conflicts!".to_string())
+    }
+}
+
+fn has_rename_conflicts(renames: &Vec<Rename>) -> bool {
+    use std::collections::HashMap;
+
+    let mut conflicting: Vec<Rename> = vec![];
+    let seen: HashMap<u64, Rename> = HashMap::new();
+
+    for r in renames {
+        let k = r.combined_hash();
+        if seen.contains_key(&k) {
+            let other = seen.get(&k).unwrap();
+
+            if other.equals(&r) {
+                conflicting.push(r.clone());
+            } else {
+                conflicting.push(r.clone());
+                conflicting.push(other.clone());
+            }
+
+        }
+    }
+
+    println!("Conflicting: {:?}", conflicting);
+    !conflicting.is_empty()
 }
 
 // TODO: We need to be smarter about bulk renames
@@ -40,7 +70,7 @@ fn do_bulk_rename(renames: &Vec<Rename>, early_exit: bool, is_demo: bool) -> Res
     Ok(count)
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 struct Rename {
     from: String,
     to: String,
@@ -48,6 +78,17 @@ struct Rename {
 }
 
 impl Rename {
+    fn combined_hash(&self) -> u64 {
+        let mut s = DefaultHasher::new();
+        self.from.hash(&mut s);
+        self.to.hash(&mut s);
+        s.finish()
+    }
+
+    fn equals(&self, other: &Rename) -> bool {
+        self.from == other.from && self.to == other.to && self.is_dir == other.is_dir
+    }
+
     fn do_rename(&self, is_demo: bool) -> bool {
         if is_demo {
             println!("{} -> {}", self.from, self.to);
