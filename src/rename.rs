@@ -1,6 +1,7 @@
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, metadata};
 use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
 
 pub fn bulk_rename(froms: &Vec<String>, tos: &Vec<String>, is_demo: bool) -> Result<i32, String> {
     if froms.len() != tos.len() {
@@ -16,36 +17,38 @@ pub fn bulk_rename(froms: &Vec<String>, tos: &Vec<String>, is_demo: bool) -> Res
         }
     }
 
-    if !has_rename_conflicts(&renames) {
+    let (conflicting, non_conflicting) = split_by_rename_conflicts(&renames);
+
+    if conflicting.is_empty() {
         do_bulk_rename(&renames, false, is_demo)
     } else {
         Err("There are rename conflicts!".to_string())
     }
 }
 
-fn has_rename_conflicts(renames: &Vec<Rename>) -> bool {
-    use std::collections::HashMap;
-
-    let mut conflicting: Vec<Rename> = vec![];
-    let seen: HashMap<u64, Rename> = HashMap::new();
+fn split_by_rename_conflicts(renames: &Vec<Rename>) -> (HashSet<Rename>, HashSet<Rename>) {
+    let mut seen: HashMap<u64, Rename> = HashMap::new();
+    let mut conflicting: HashSet<Rename> = HashSet::new();
 
     for r in renames {
         let k = r.combined_hash();
         if seen.contains_key(&k) {
             let other = seen.get(&k).unwrap();
 
-            if other.equals(&r) {
-                conflicting.push(r.clone());
-            } else {
-                conflicting.push(r.clone());
-                conflicting.push(other.clone());
-            }
-
+            conflicting.insert(r.clone());
+            conflicting.insert(other.clone());
+        } else {
+            seen.insert(k, r.clone());
         }
     }
 
-    println!("Conflicting: {:?}", conflicting);
-    !conflicting.is_empty()
+    let non_conflicting: HashSet<Rename> = renames
+        .iter()
+        .filter(|r| !conflicting.contains(&r))
+        .map(|r| r.clone())
+        .collect();
+
+    (conflicting, non_conflicting)
 }
 
 // TODO: We need to be smarter about bulk renames
@@ -70,7 +73,7 @@ fn do_bulk_rename(renames: &Vec<Rename>, early_exit: bool, is_demo: bool) -> Res
     Ok(count)
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
 struct Rename {
     from: String,
     to: String,
@@ -79,14 +82,14 @@ struct Rename {
 
 impl Rename {
     fn combined_hash(&self) -> u64 {
-        let mut s = DefaultHasher::new();
-        self.from.hash(&mut s);
-        self.to.hash(&mut s);
-        s.finish()
-    }
+        fn hash_str(s: &str) -> u64 {
+            let mut h = DefaultHasher::new();
+            s.hash(&mut h);
+            h.finish()
+        }
 
-    fn equals(&self, other: &Rename) -> bool {
-        self.from == other.from && self.to == other.to && self.is_dir == other.is_dir
+        let (combined, _) = hash_str(&self.from).overflowing_add(hash_str(&self.to));
+        combined
     }
 
     fn do_rename(&self, is_demo: bool) -> bool {
@@ -98,7 +101,6 @@ impl Rename {
             status.is_ok()
         }
     }
-
 
     fn rename_for(from: &str, to: &str) -> Result<Rename, Option<String>> {
         if from.eq(to) {
@@ -113,10 +115,8 @@ impl Rename {
                     };
 
                     Ok(rename)
-                },
-                Err(_) => {
-                    Err(Option::Some(format!("Error requesting metadata: {}", from)))
-                },
+                }
+                Err(_) => Err(Option::Some(format!("Error requesting metadata: {}", from))),
             }
         }
     }

@@ -68,24 +68,30 @@ fn main() {
     let include_dirs = matches.occurrences_of("include-dirs") > 0;
 
     let renaming = match mode {
-        "left" =>
-            if left.is_some() {
-                Ok(app::RenameOp::from_left(left.unwrap(), editor, false))
-            } else {
-                Err("Left file arg is required for left mode".to_string())
-            },
-        "compare" =>
-            if left.is_some() && right.is_some() {
-                Ok(app::RenameOp::from_compare(left.unwrap(), right.unwrap(), false))
-            } else {
-                Err("Left file and right file args are required for compare mode".to_string())
-            },
-        "dir" =>
-            if dir.is_some() {
-                Ok(app::RenameOp::from_dir(dir.unwrap(), editor, !include_dirs, false))
-            } else {
-                Err("Directory argument required for dir mode".to_string())
-            },
+        "left" => if left.is_some() {
+            Ok(app::RenameOp::from_left(left.unwrap(), editor, false))
+        } else {
+            Err("Left file arg is required for left mode".to_string())
+        },
+        "compare" => if left.is_some() && right.is_some() {
+            Ok(app::RenameOp::from_compare(
+                left.unwrap(),
+                right.unwrap(),
+                false,
+            ))
+        } else {
+            Err("Left file and right file args are required for compare mode".to_string())
+        },
+        "dir" => if dir.is_some() {
+            Ok(app::RenameOp::from_dir(
+                dir.unwrap(),
+                editor,
+                !include_dirs,
+                false,
+            ))
+        } else {
+            Err("Directory argument required for dir mode".to_string())
+        },
         "input" => Ok(app::RenameOp::from_stdin(editor, false)),
         _ => Err(format!("Unexpected mode: {}", mode)),
     };
@@ -95,14 +101,13 @@ fn main() {
             let result = app.rename();
 
             match result {
-                Ok(count) =>
-                    println!("Renamed {} files", count),
+                Ok(count) => println!("Renamed {} files", count),
                 Err(msg) => {
                     println!("Error: {}", msg);
                     std::process::exit(1);
-                },
+                }
             }
-        },
+        }
         Err(msg) => {
             println!("{}", msg);
             std::process::exit(1);

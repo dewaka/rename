@@ -1,8 +1,8 @@
 extern crate tempfile;
 
-use std::path;
 use std::fs::{self, File};
 use std::io::{self, BufRead, Read, Write};
+use std::path;
 
 use rename;
 
@@ -34,28 +34,40 @@ impl RenameOp {
     pub fn from_dir(dir: &str, editor: &str, filter_dirs: bool, is_demo: bool) -> RenameOp {
         RenameOp {
             is_demo,
-            rename_type: RenameType::Directory { dir: dir.to_string(), editor: editor.to_string(), filter_dirs },
+            rename_type: RenameType::Directory {
+                dir: dir.to_string(),
+                editor: editor.to_string(),
+                filter_dirs,
+            },
         }
     }
 
     pub fn from_stdin(editor: &str, is_demo: bool) -> RenameOp {
         RenameOp {
             is_demo,
-            rename_type: RenameType::StdinInput { editor: editor.to_string() }
+            rename_type: RenameType::StdinInput {
+                editor: editor.to_string(),
+            },
         }
     }
 
     pub fn from_left(file: &str, editor: &str, is_demo: bool) -> RenameOp {
         RenameOp {
             is_demo,
-            rename_type: RenameType::LeftFile { file: file.to_string(), editor: editor.to_string() },
+            rename_type: RenameType::LeftFile {
+                file: file.to_string(),
+                editor: editor.to_string(),
+            },
         }
     }
 
     pub fn from_compare(left: &str, right: &str, is_demo: bool) -> RenameOp {
         RenameOp {
             is_demo,
-            rename_type: RenameType::FileCompare { left: left.to_string(), right: right.to_string() },
+            rename_type: RenameType::FileCompare {
+                left: left.to_string(),
+                right: right.to_string(),
+            },
         }
     }
 
@@ -64,17 +76,16 @@ impl RenameOp {
 
         let re_paths = fs::read_dir(path::PathBuf::from(dir));
         match re_paths {
-            Ok(paths) =>
-                for path in paths {
-                    let file = path.unwrap().file_name().to_str().unwrap().to_owned();
+            Ok(paths) => for path in paths {
+                let file = path.unwrap().file_name().to_str().unwrap().to_owned();
 
-                    let md = metadata(&file).unwrap();
-                    if md.is_file() {
-                        contents.push(file);
-                    } else if !filter_dirs {
-                        contents.push(file);
-                    }
-                },
+                let md = metadata(&file).unwrap();
+                if md.is_file() {
+                    contents.push(file);
+                } else if !filter_dirs {
+                    contents.push(file);
+                }
+            },
             Err(e) => println!("{:?}", e),
         }
     }
@@ -157,15 +168,25 @@ impl RenameOp {
         let mut tos: Vec<String> = vec![];
 
         match self.rename_type {
-            RenameType::Directory { ref dir, ref editor, filter_dirs } => {
+            RenameType::Directory {
+                ref dir,
+                ref editor,
+                filter_dirs,
+            } => {
                 self.directory_contents(&dir, &mut froms, filter_dirs);
                 self.read_from_editor(&froms, &editor, &mut tos);
             }
-            RenameType::LeftFile { ref file, ref editor } => {
+            RenameType::LeftFile {
+                ref file,
+                ref editor,
+            } => {
                 self.read_from_file(&file, &mut froms);
                 self.read_from_editor(&froms, &editor, &mut tos);
             }
-            RenameType::FileCompare { ref left, ref right } => {
+            RenameType::FileCompare {
+                ref left,
+                ref right,
+            } => {
                 self.read_from_file(&left, &mut froms);
                 self.read_from_file(&right, &mut tos);
             }
@@ -178,4 +199,3 @@ impl RenameOp {
         rename::bulk_rename(&froms, &tos, self.is_demo)
     }
 }
-
