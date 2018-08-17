@@ -6,3 +6,4 @@ authors = ["Chathura Colombage <dcdewaka@gmail.com>"]
 [dependencies]
 tempfile = "2.2.0"
 clap = "2.32.0"
+uuid = { version = "0.6", features = ["v4"] }

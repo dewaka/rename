@@ -1,5 +1,6 @@
 extern crate clap;
 extern crate tempfile;
+extern crate uuid;
 
 mod app;
 mod rename;

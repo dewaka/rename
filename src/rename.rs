@@ -19,32 +19,54 @@ pub fn bulk_rename(froms: &Vec<String>, tos: &Vec<String>, is_demo: bool) -> Res
 
     let (conflicting, non_conflicting) = split_by_rename_conflicts(&renames);
 
-    if conflicting.is_empty() {
-        do_bulk_rename(&renames, false, is_demo)
-    } else {
-        Err("There are rename conflicts!".to_string())
+    match do_bulk_rename(&non_conflicting, false, is_demo) {
+        Ok(count1) => match do_bulk_rename(&with_temporary_moves(&conflicting), false, is_demo) {
+            Ok(_) => Ok(count1 + conflicting.len() as i32 * 2),
+            Err(_) => Ok(count1),
+        },
+        e => e,
     }
 }
 
-fn split_by_rename_conflicts(renames: &Vec<Rename>) -> (HashSet<Rename>, HashSet<Rename>) {
+fn with_temporary_moves(renames: &Vec<(Rename, Rename)>) -> Vec<Rename> {
+    use uuid::Uuid;
+
+    let mut non_conflicting: Vec<Rename> = vec![];
+    for (ref x, ref y) in renames {
+        let temp_file_name = format!("{}", Uuid::new_v4());
+
+        non_conflicting.push(x.with_to(&temp_file_name));
+        non_conflicting.push(y.clone());
+        non_conflicting.push(x.with_from(&temp_file_name));
+    }
+
+    non_conflicting
+}
+
+fn split_by_rename_conflicts(renames: &Vec<Rename>) -> (Vec<(Rename, Rename)>, Vec<Rename>) {
     let mut seen: HashMap<u64, Rename> = HashMap::new();
-    let mut conflicting: HashSet<Rename> = HashSet::new();
+    let mut conflicting_set: HashSet<Rename> = HashSet::new();
+    let mut conflicting: Vec<(Rename, Rename)> = vec![];
 
     for r in renames {
         let k = r.combined_hash();
         if seen.contains_key(&k) {
             let other = seen.get(&k).unwrap();
 
-            conflicting.insert(r.clone());
-            conflicting.insert(other.clone());
+            if r != other {
+                conflicting_set.insert(r.clone());
+                conflicting_set.insert(other.clone());
+
+                conflicting.push((r.clone(), other.clone()));
+            }
         } else {
             seen.insert(k, r.clone());
         }
     }
 
-    let non_conflicting: HashSet<Rename> = renames
+    let non_conflicting: Vec<Rename> = renames
         .iter()
-        .filter(|r| !conflicting.contains(&r))
+        .filter(|r| !conflicting_set.contains(&r))
         .map(|r| r.clone())
         .collect();
 
@@ -118,6 +140,22 @@ impl Rename {
                 }
                 Err(_) => Err(Option::Some(format!("Error requesting metadata: {}", from))),
             }
+        }
+    }
+
+    fn with_from(&self, from: &str) -> Rename {
+        Rename {
+            from: from.to_string(),
+            to: self.to.clone(),
+            is_dir: self.is_dir,
+        }
+    }
+
+    fn with_to(&self, to: &str) -> Rename {
+        Rename {
+            from: self.from.clone(),
+            to: to.to_string(),
+            is_dir: self.is_dir,
         }
     }
 }
