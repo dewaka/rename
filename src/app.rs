@@ -6,18 +6,31 @@ use std::path;
 
 use rename;
 
+pub enum SortOrder {
+    Alphabetical,
+    DirsFirst,
+}
+
+pub struct SortOption {
+    pub order: SortOrder,
+    pub ascending: bool,
+}
+
 enum RenameType {
     Directory {
         dir: String,
         editor: String,
         filter_dirs: bool,
+        sorting: Option<SortOption>,
     },
     LeftFile {
         file: String,
         editor: String,
+        sorting: Option<SortOption>,
     },
     StdinInput {
         editor: String,
+        sorting: Option<SortOption>,
     },
     FileCompare {
         left: String,
@@ -31,32 +44,46 @@ pub struct RenameOp {
 }
 
 impl RenameOp {
-    pub fn from_dir(dir: &str, editor: &str, filter_dirs: bool, is_demo: bool) -> RenameOp {
+    pub fn from_dir(
+        dir: &str,
+        editor: &str,
+        filter_dirs: bool,
+        is_demo: bool,
+        sorting: Option<SortOption>,
+    ) -> RenameOp {
         RenameOp {
             is_demo,
             rename_type: RenameType::Directory {
                 dir: dir.to_string(),
                 editor: editor.to_string(),
                 filter_dirs,
+                sorting,
             },
         }
     }
 
-    pub fn from_stdin(editor: &str, is_demo: bool) -> RenameOp {
+    pub fn from_stdin(editor: &str, is_demo: bool, sorting: Option<SortOption>) -> RenameOp {
         RenameOp {
             is_demo,
             rename_type: RenameType::StdinInput {
                 editor: editor.to_string(),
+                sorting,
             },
         }
     }
 
-    pub fn from_left(file: &str, editor: &str, is_demo: bool) -> RenameOp {
+    pub fn from_left(
+        file: &str,
+        editor: &str,
+        is_demo: bool,
+        sorting: Option<SortOption>,
+    ) -> RenameOp {
         RenameOp {
             is_demo,
             rename_type: RenameType::LeftFile {
                 file: file.to_string(),
                 editor: editor.to_string(),
+                sorting,
             },
         }
     }
@@ -163,6 +190,53 @@ impl RenameOp {
         }
     }
 
+    fn sort_alphabetical(&self, files: &mut Vec<String>, ascending: bool) {
+        files.sort_by(|x, y| {
+            if ascending {
+                x.cmp(y)
+            } else {
+                y.cmp(x)
+            }
+        });
+    }
+
+    fn sort_dirs_first(&self, files: &mut Vec<String>, ascending: bool) {
+        let mut folders: Vec<String> = vec![];
+        let mut normal_files: Vec<String> = vec![];
+
+        for ref s in files.iter() {
+            match fs::metadata(s) {
+                Ok(m) => if m.is_dir() {
+                    folders.push(s.to_string());
+                } else {
+                    normal_files.push(s.to_string());
+                },
+                Err(_) => normal_files.push(s.to_string()),
+            }
+        }
+
+        self.sort_alphabetical(&mut folders, ascending);
+        self.sort_alphabetical(&mut normal_files, ascending);
+
+        files.clear();
+        files.append(&mut folders);
+        files.append(&mut normal_files);
+    }
+
+    fn sort_files(&self, files: &mut Vec<String>, sort_option: &Option<SortOption>) {
+        match sort_option {
+            Some(SortOption {
+                order: SortOrder::Alphabetical,
+                ascending,
+            }) => self.sort_alphabetical(files, *ascending),
+            Some(SortOption {
+                order: SortOrder::DirsFirst,
+                ascending,
+            }) => self.sort_dirs_first(files, *ascending),
+            None => (),
+        }
+    }
+
     pub fn rename(&self) -> Result<i32, String> {
         let mut froms: Vec<String> = vec![];
         let mut tos: Vec<String> = vec![];
@@ -172,15 +246,19 @@ impl RenameOp {
                 ref dir,
                 ref editor,
                 filter_dirs,
+                ref sorting,
             } => {
                 self.directory_contents(&dir, &mut froms, filter_dirs);
+                self.sort_files(&mut froms, sorting);
                 self.read_from_editor(&froms, &editor, &mut tos);
             }
             RenameType::LeftFile {
                 ref file,
                 ref editor,
+                ref sorting,
             } => {
                 self.read_from_file(&file, &mut froms);
+                self.sort_files(&mut froms, sorting);
                 self.read_from_editor(&froms, &editor, &mut tos);
             }
             RenameType::FileCompare {
@@ -190,8 +268,12 @@ impl RenameOp {
                 self.read_from_file(&left, &mut froms);
                 self.read_from_file(&right, &mut tos);
             }
-            RenameType::StdinInput { ref editor } => {
+            RenameType::StdinInput {
+                ref editor,
+                ref sorting,
+            } => {
                 self.read_from_stdin(&mut froms);
+                self.sort_files(&mut froms, sorting);
                 self.read_from_editor(&froms, &editor, &mut tos);
             }
         }
