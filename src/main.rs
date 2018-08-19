@@ -66,11 +66,11 @@ fn main() {
                 .help("Sorting descending order"),
         )
         .arg(
-            Arg::with_name("include-dirs")
-                .short("d")
+            Arg::with_name("exclude-dirs")
+                .short("D")
                 .required(false)
                 .multiple(false)
-                .help("Whether to include directories"),
+                .help("Whether to exclude directories"),
         )
         .get_matches();
 
@@ -81,7 +81,7 @@ fn main() {
     let right = matches.value_of("right");
 
     let editor = matches.value_of("editor").unwrap_or("vim");
-    let include_dirs = matches.occurrences_of("include-dirs") > 0;
+    let exclude_dirs = matches.occurrences_of("include-dirs") > 0;
 
     let sort_type = matches.value_of("sort").unwrap_or("none");
     let descending = matches.occurrences_of("sort-desc") > 0;
@@ -125,7 +125,7 @@ fn main() {
             Ok(app::RenameOp::from_dir(
                 dir.unwrap(),
                 editor,
-                !include_dirs,
+                exclude_dirs,
                 false,
                 sorting,
             ))

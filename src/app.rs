@@ -104,13 +104,18 @@ impl RenameOp {
         let re_paths = fs::read_dir(path::PathBuf::from(dir));
         match re_paths {
             Ok(paths) => for path in paths {
-                let file = path.unwrap().file_name().to_str().unwrap().to_owned();
+                let file_path = path.unwrap().path();
 
-                let md = metadata(&file).unwrap();
-                if md.is_file() {
-                    contents.push(file);
-                } else if !filter_dirs {
-                    contents.push(file);
+                match metadata(&file_path) {
+                    Ok(md) => {
+                        let file = file_path.to_str().unwrap();
+                        if md.is_file() {
+                            contents.push(file.to_owned());
+                        } else if !filter_dirs {
+                            contents.push(file.to_owned());
+                        }
+                    }
+                    Err(e) => println!("Error reading path: {:?} => {:?}", &file_path, e),
                 }
             },
             Err(e) => println!("{:?}", e),
@@ -153,6 +158,11 @@ impl RenameOp {
     }
 
     fn read_from_editor(&self, froms: &Vec<String>, editor: &str, tos: &mut Vec<String>) {
+        if froms.is_empty() {
+            println!("Nothing to rename!");
+            return;
+        }
+
         let temp_file = self.write_temp_file(&froms);
         let ok = self.open_file_with_editor(temp_file.path().to_str().unwrap(), editor);
 
