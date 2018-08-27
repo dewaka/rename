@@ -135,7 +135,7 @@ impl Rename {
 
     fn rename_for(from: &str, to: &str) -> Result<Rename, Option<String>> {
         if from.eq(to) {
-            Err(Option::None)
+            Err(None)
         } else {
             match metadata(from) {
                 Ok(md) => {
@@ -147,7 +147,103 @@ impl Rename {
 
                     Ok(rename)
                 }
-                Err(_) => Err(Option::Some(format!("Error requesting metadata: {}", from))),
+                Err(_) => Err(Some(format!("Error requesting metadata: {}", from))),
+            }
+        }
+    }
+
+    fn rename_sequence(from: &str, to: &str) -> Vec<(String, String)> {
+        let mut renames = vec![];
+
+        let mut from_path = PathBuf::from(from);
+        let mut to_path = PathBuf::from(to);
+        let mut from_path_finished;
+        let mut to_path_finished;
+
+        loop {
+            let f = from_path.clone();
+            let t = to_path.clone();
+
+            let f1 = f.file_name();
+            let t1 = t.file_name();
+
+            from_path_finished = f1.is_none();
+            to_path_finished = t1.is_none();
+
+            if from_path_finished || to_path_finished {
+                break;
+            }
+
+            if f1 != t1 {
+                // We need a rename from f1 to t1
+                let p1 = from_path.parent();
+
+                if p1.is_none() {
+                    let fs1 = f1.unwrap().to_str().unwrap().to_string();
+                    let ts1 = t1.unwrap().to_str().unwrap().to_string();
+                    renames.push((fs1, ts1));
+                } else {
+                    let mut p = PathBuf::new();
+                    p.push(p1.unwrap());
+                    p.push(f1.unwrap());
+
+                    let fs1 = p.to_str().unwrap().to_string();
+                    assert!(p.pop());
+
+                    p.push(t1.unwrap());
+                    let ts1 = p.to_str().unwrap().to_string();
+
+                    renames.push((fs1, ts1));
+                }
+            }
+
+            from_path_finished = !from_path.pop();
+            to_path_finished = !to_path.pop();
+
+            if from_path_finished || to_path_finished {
+                break;
+            }
+        }
+
+        if from_path_finished == to_path_finished {
+            renames
+        } else {
+            vec![]
+        }
+    }
+
+    /*
+    Rename from:
+            x/y/z.txt -> a/b/c.txt =>
+              x/y/z.txt -> x/y/c.txt
+              x/y/c.txt -> x/b/c.txt
+              x/b/c.txt -> a/b/c.txt
+    */
+    fn renames_for(from: &str, to: &str) -> Result<Vec<Rename>, Option<String>> {
+        if from.eq(to) {
+            Err(None)
+        } else {
+            match metadata(from) {
+                Ok(md) => {
+                    let mut renames = vec![];
+
+                    if md.is_dir() {
+                        renames.push(Rename {
+                            from: from.to_owned(),
+                            to: to.to_owned(),
+                            is_dir: false,
+                        });
+                    } else {
+                        renames.push(Rename {
+                            from: from.to_owned(),
+                            to: to.to_owned(),
+                            is_dir: false,
+                        });
+                    }
+
+                    Ok(renames)
+                }
+                Err(_) => Err(Some(format!("Error requesting metadata: {}", from))),
             }
         }
     }
@@ -267,6 +363,38 @@ mod tests {
 
         assert_eq!(read_all(&file_a), contents_b.to_owned());
         assert_eq!(read_all(&file_b), contents_a.to_owned());
+    }
+
+    #[test]
+    fn rename_sequence_test() {
+        // Successful renames
+        {
+            let res = super::Rename::rename_sequence("/x/y/z", "/a/b/c");
+            assert_eq!(res.len(), 3);
+            assert_eq!(res[0], ("/x/y/z".to_string(), "/x/y/c".to_string()));
+            assert_eq!(res[1], ("/x/y".to_string(), "/x/b".to_string()));
+            assert_eq!(res[2], ("/x".to_string(), "/a".to_string()));
+        }
+        {
+            let res = super::Rename::rename_sequence("/x", "/a");
+            assert_eq!(res.len(), 1);
+        }
+
+        // Following ones should fail due to them not being compatible paths
+        {
+            let res = super::Rename::rename_sequence("/A/B/C", "/X/Y");
+            assert_eq!(res.len(), 0);
+        }
+        {
+            let res = super::Rename::rename_sequence("/X/Y", "/A/B/C");
+            assert_eq!(res.len(), 0);
+        }
+
+        // This case should also return empty since we don't need to rename anything here
+        {
+            let res = super::Rename::rename_sequence("/x", "/x");
+            assert_eq!(res.len(), 0);
+        }
     }
 
 }
