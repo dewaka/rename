@@ -11,10 +11,9 @@ pub fn bulk_rename(froms: &Vec<String>, tos: &Vec<String>, is_demo: bool) -> Res
 
     let mut renames: Vec<Rename> = vec![];
     for (from, to) in froms.iter().zip(tos.iter()) {
-        match Rename::rename_for(from, to) {
-            Ok(rename) => renames.push(rename),
-            Err(Some(msg)) => return Err(msg),
-            Err(None) => (),
+        match Rename::renames_for(from, to) {
+            Ok(rs) => renames.extend(rs.iter().cloned()),
+            Err(msg) => return Err(msg),
         }
     }
 
@@ -108,10 +107,16 @@ fn do_bulk_rename(renames: &Vec<Rename>, early_exit: bool, is_demo: bool) -> Res
 struct Rename {
     from: String,
     to: String,
-    is_dir: bool,
 }
 
 impl Rename {
+    fn new(from: &str, to: &str) -> Rename {
+        Rename {
+            from: from.to_owned(),
+            to: to.to_owned(),
+        }
+    }
+
     fn combined_hash(&self) -> u64 {
         fn hash_str(s: &str) -> u64 {
             let mut h = DefaultHasher::new();
@@ -142,7 +147,6 @@ impl Rename {
                     let rename = Rename {
                         from: from.to_owned(),
                         to: to.to_owned(),
-                        is_dir: md.is_dir(),
                     };
 
                     Ok(rename)
@@ -152,8 +156,8 @@ impl Rename {
         }
     }
 
-    fn rename_sequence(from: &str, to: &str) -> Vec<(String, String)> {
-        let mut renames = vec![];
+    fn rename_sequence(from: &str, to: &str) -> Result<Vec<Rename>, String> {
+        let mut renames: Vec<Rename> = vec![];
 
         let mut from_path = PathBuf::from(from);
         let mut to_path = PathBuf::from(to);
@@ -179,21 +183,22 @@ impl Rename {
                 let p1 = from_path.parent();
 
                 if p1.is_none() {
-                    let fs1 = f1.unwrap().to_str().unwrap().to_string();
-                    let ts1 = t1.unwrap().to_str().unwrap().to_string();
-                    renames.push((fs1, ts1));
+                    let fs1 = f1.unwrap().to_str().unwrap();
+                    let ts1 = t1.unwrap().to_str().unwrap();
+
+                    renames.push(Rename::new(fs1, ts1));
                 } else {
                     let mut p = PathBuf::new();
                     p.push(p1.unwrap());
                     p.push(f1.unwrap());
 
-                    let fs1 = p.to_str().unwrap().to_string();
+                    let fs1 = p.to_str().unwrap().to_owned();
                     assert!(p.pop());
 
                     p.push(t1.unwrap());
-                    let ts1 = p.to_str().unwrap().to_string();
+                    let ts1 = p.to_str().unwrap();
 
-                    renames.push((fs1, ts1));
+                    renames.push(Rename::new(&fs1, ts1));
                 }
             }
 
@@ -206,53 +211,23 @@ impl Rename {
         }
 
         if from_path_finished == to_path_finished {
-            renames
+            Ok(renames)
         } else {
-            vec![]
+            Err(format!(
+                "Incompatible paths for renaming: {} -> {}",
+                from, to
+            ))
         }
     }
 
-    /*
-    Rename from:
-            x/y/z.txt -> a/b/c.txt =>
-              x/y/z.txt -> x/y/c.txt
-              x/y/c.txt -> x/b/c.txt
-              x/b/c.txt -> a/b/c.txt
-    */
-    fn renames_for(from: &str, to: &str) -> Result<Vec<Rename>, Option<String>> {
-        if from.eq(to) {
-            Err(None)
-        } else {
-            match metadata(from) {
-                Ok(md) => {
-                    let mut renames = vec![];
-
-                    if md.is_dir() {
-                        renames.push(Rename {
-                            from: from.to_owned(),
-                            to: to.to_owned(),
-                            is_dir: false,
-                        });
-                    } else {
-                        renames.push(Rename {
-                            from: from.to_owned(),
-                            to: to.to_owned(),
-                            is_dir: false,
-                        });
-                    }
-
-                    Ok(renames)
-                }
-                Err(_) => Err(Some(format!("Error requesting metadata: {}", from))),
-            }
-        }
+    pub fn renames_for(from: &str, to: &str) -> Result<Vec<Rename>, String> {
+        Rename::rename_sequence(from, to)
     }
 
     fn with_from(&self, from: &str) -> Rename {
         Rename {
             from: from.to_string(),
             to: self.to.clone(),
-            is_dir: self.is_dir,
         }
     }
 
@@ -260,13 +235,13 @@ impl Rename {
         Rename {
             from: self.from.clone(),
             to: to.to_string(),
-            is_dir: self.is_dir,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::Rename;
     use std::env;
     use std::fs::{self, File};
     use std::io::prelude::*;
@@ -369,31 +344,51 @@ mod tests {
     fn rename_sequence_test() {
         // Successful renames
         {
-            let res = super::Rename::rename_sequence("/x/y/z", "/a/b/c");
-            assert_eq!(res.len(), 3);
-            assert_eq!(res[0], ("/x/y/z".to_string(), "/x/y/c".to_string()));
-            assert_eq!(res[1], ("/x/y".to_string(), "/x/b".to_string()));
-            assert_eq!(res[2], ("/x".to_string(), "/a".to_string()));
+            let result = Rename::rename_sequence("/x/y/z", "/a/b/c");
+
+            match result {
+                Ok(res) => {
+                    assert_eq!(res.len(), 3);
+
+                    assert_eq!(
+                        res,
+                        vec![
+                            Rename::new("/x/y/z", "/x/y/c"),
+                            Rename::new("/x/y", "/x/b"),
+                            Rename::new("/x", "/a"),
+                        ]
+                    );
+                }
+                Err(_) => assert!(false),
+            }
         }
         {
-            let res = super::Rename::rename_sequence("/x", "/a");
-            assert_eq!(res.len(), 1);
+            let result = Rename::rename_sequence("/x", "/a");
+
+            match result {
+                Ok(res) => {
+                    assert_eq!(res.len(), 1);
+                    assert_eq!(res[0], Rename::new("/x", "/a"));
+                }
+                Err(_) => assert!(false),
+            }
         }
 
         // Following ones should fail due to them not being compatible paths
         {
-            let res = super::Rename::rename_sequence("/A/B/C", "/X/Y");
-            assert_eq!(res.len(), 0);
+            let result = Rename::rename_sequence("/A/B/C", "/X/Y");
+            assert!(result.is_err());
         }
         {
-            let res = super::Rename::rename_sequence("/X/Y", "/A/B/C");
-            assert_eq!(res.len(), 0);
+            let result = Rename::rename_sequence("/X/Y", "/A/B/C");
+            assert!(result.is_err());
         }
 
-        // This case should also return empty since we don't need to rename anything here
+        // This case should also return empty vector of renames since we don't need to rename anything here
         {
-            let res = super::Rename::rename_sequence("/x", "/x");
-            assert_eq!(res.len(), 0);
+            let result = Rename::rename_sequence("/x", "/x");
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), vec![]);
         }
     }
 
