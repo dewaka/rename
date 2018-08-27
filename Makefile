@@ -1,6 +1,6 @@
-all: rname
+all: rename
 
-rname:
+rename:
 	cargo build
 
 clean:

@@ -9,7 +9,7 @@ mod rename;
 use clap::{App, Arg};
 
 fn main() {
-    let matches = App::new("rname: bulk rename")
+    let matches = App::new("rename: bulk rename")
         .version("0.1")
         .author("Chathura C. <dcdewaka@gmail.com>")
         .about("Renames files in bulk by delegating renaming to an editor")
