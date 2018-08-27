@@ -1,6 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, metadata};
+use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
@@ -135,24 +135,6 @@ impl Rename {
         } else {
             let status = fs::rename(&self.from, &self.to);
             status.is_ok()
-        }
-    }
-
-    fn rename_for(from: &str, to: &str) -> Result<Rename, Option<String>> {
-        if from.eq(to) {
-            Err(None)
-        } else {
-            match metadata(from) {
-                Ok(md) => {
-                    let rename = Rename {
-                        from: from.to_owned(),
-                        to: to.to_owned(),
-                    };
-
-                    Ok(rename)
-                }
-                Err(_) => Err(Some(format!("Error requesting metadata: {}", from))),
-            }
         }
     }
 
