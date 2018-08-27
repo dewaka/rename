@@ -2,7 +2,6 @@ extern crate tempfile;
 
 use std::fs::{self, File};
 use std::io::{self, BufRead, Read, Write};
-use std::path;
 
 use rename;
 
@@ -21,7 +20,7 @@ enum RenameType {
         dir: String,
         editor: String,
         filter_dirs: bool,
-        recursive: bool,
+        depth: Option<usize>,
         sorting: Option<SortOption>,
     },
     LeftFile {
@@ -48,7 +47,7 @@ impl RenameOp {
     pub fn from_dir(
         dir: &str,
         editor: &str,
-        recursive: bool,
+        depth: Option<usize>,
         filter_dirs: bool,
         is_demo: bool,
         sorting: Option<SortOption>,
@@ -58,7 +57,7 @@ impl RenameOp {
             rename_type: RenameType::Directory {
                 dir: dir.to_string(),
                 editor: editor.to_string(),
-                recursive,
+                depth,
                 filter_dirs,
                 sorting,
             },
@@ -101,48 +100,36 @@ impl RenameOp {
         }
     }
 
-    fn directory_contents(&self, dir: &str, contents: &mut Vec<String>, recursive: bool, filter_dirs: bool) {
+    fn directory_contents(
+        &self,
+        dir: &str,
+        contents: &mut Vec<String>,
+        depth: Option<usize>,
+        filter_dirs: bool,
+    ) {
         use std::fs::metadata;
         use walkdir::WalkDir;;
 
-        if recursive {
-            for entry in WalkDir::new(dir).follow_links(false) {
-                match entry {
-                    Ok(p) => {
-                        match metadata(p.path()) {
-                            Ok(md) => {
-                                let file = p.path().to_str().unwrap();
-                                if md.is_file() {
-                                    contents.push(file.to_owned());
-                                } else if !filter_dirs {
-                                    contents.push(file.to_owned());
-                                }
-                            }
-                            Err(e) => println!("Error reading metadata: {}", e),
-                        }
-                    },
-                    Err(e) => println!("Error: {}", e),
-                }
-            }
+        let walker = if let Some(n) = depth {
+            WalkDir::new(dir).follow_links(false).max_depth(n)
         } else {
-            let re_paths = fs::read_dir(path::PathBuf::from(dir));
-            match re_paths {
-                Ok(paths) => for path in paths {
-                    let file_path = path.unwrap().path();
+            WalkDir::new(dir).follow_links(false)
+        };
 
-                    match metadata(&file_path) {
-                        Ok(md) => {
-                            let file = file_path.to_str().unwrap();
-                            if md.is_file() {
-                                contents.push(file.to_owned());
-                            } else if !filter_dirs {
-                                contents.push(file.to_owned());
-                            }
+        for entry in walker {
+            match entry {
+                Ok(p) => match metadata(p.path()) {
+                    Ok(md) => {
+                        let file = p.path().to_str().unwrap();
+                        if md.is_file() {
+                            contents.push(file.to_owned());
+                        } else if !filter_dirs {
+                            contents.push(file.to_owned());
                         }
-                        Err(e) => println!("Error reading path: {:?} => {:?}", &file_path, e),
                     }
+                    Err(e) => println!("Error reading metadata: {}", e),
                 },
-                Err(e) => println!("{:?}", e),
+                Err(e) => println!("Error: {}", e),
             }
         }
     }
@@ -280,11 +267,11 @@ impl RenameOp {
             RenameType::Directory {
                 ref dir,
                 ref editor,
-                recursive,
+                depth,
                 filter_dirs,
                 ref sorting,
             } => {
-                self.directory_contents(&dir, &mut froms, recursive, filter_dirs);
+                self.directory_contents(&dir, &mut froms, depth, filter_dirs);
                 self.sort_files(&mut froms, sorting);
                 self.read_from_editor(&froms, &editor, &mut tos);
             }

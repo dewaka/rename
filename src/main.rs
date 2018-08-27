@@ -60,6 +60,14 @@ fn main() {
                 .help("Specify the sorting mode - none (default), alph or dir"),
         )
         .arg(
+            Arg::with_name("depth")
+                .short("n")
+                .required(false)
+                .takes_value(true)
+                .multiple(false)
+                .help("Specify sub-directory depth for recursive option"),
+        )
+        .arg(
             Arg::with_name("sort-desc")
                 .short("O")
                 .required(false)
@@ -68,7 +76,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("exclude-dirs")
-                .short("D")
+                .short("E")
                 .required(false)
                 .multiple(false)
                 .help("Whether to exclude directories"),
@@ -87,6 +95,7 @@ fn main() {
     let dir = matches.value_of("directory");
     let left = matches.value_of("left");
     let right = matches.value_of("right");
+    let arg_depth = matches.value_of("depth");
 
     let editor = matches.value_of("editor").unwrap_or("vim");
     let exclude_dirs = matches.occurrences_of("exclude-dirs") > 0;
@@ -109,6 +118,19 @@ fn main() {
     };
 
     let sorting = sort_option.expect(&format!("Invalid sort option: {}", sort_type));
+
+    let depth_option = match arg_depth {
+        Some(sdepth) => Some(sdepth.parse().expect(&format!("Invalid depth: {}", sdepth))),
+        None => None,
+    };
+
+    // If rename option is explicitly given, then always use given depth which could be None.
+    // If depth_option is none, full recursive directory walk will be done for renaming files.
+    let depth = if recursive || depth_option.is_some() {
+        depth_option
+    } else {
+        Some(1) // Default is just current directory depth
+    };
 
     let renaming = match mode {
         "left" => if left.is_some() {
@@ -134,7 +156,7 @@ fn main() {
             Ok(app::RenameOp::from_dir(
                 dir.unwrap(),
                 editor,
-                recursive,
+                depth,
                 exclude_dirs,
                 false,
                 sorting,
