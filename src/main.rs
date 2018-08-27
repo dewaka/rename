@@ -1,6 +1,7 @@
 extern crate clap;
 extern crate tempfile;
 extern crate uuid;
+extern crate walkdir;
 
 mod app;
 mod rename;
@@ -72,6 +73,13 @@ fn main() {
                 .multiple(false)
                 .help("Whether to exclude directories"),
         )
+        .arg(
+            Arg::with_name("recursive")
+                .short("R")
+                .required(false)
+                .multiple(false)
+                .help("Rename in subdirectories recursively"),
+        )
         .get_matches();
 
     let mode = matches.value_of("mode").unwrap_or("dir");
@@ -81,7 +89,8 @@ fn main() {
     let right = matches.value_of("right");
 
     let editor = matches.value_of("editor").unwrap_or("vim");
-    let exclude_dirs = matches.occurrences_of("include-dirs") > 0;
+    let exclude_dirs = matches.occurrences_of("exclude-dirs") > 0;
+    let recursive = matches.occurrences_of("recursive") > 0;
 
     let sort_type = matches.value_of("sort").unwrap_or("none");
     let descending = matches.occurrences_of("sort-desc") > 0;
@@ -125,6 +134,7 @@ fn main() {
             Ok(app::RenameOp::from_dir(
                 dir.unwrap(),
                 editor,
+                recursive,
                 exclude_dirs,
                 false,
                 sorting,
