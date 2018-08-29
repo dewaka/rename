@@ -110,7 +110,7 @@ struct Rename {
 }
 
 impl Rename {
-    fn new(from: &str, to: &str) -> Rename {
+    fn new(from: &str, to: &str) -> Self {
         Rename {
             from: from.to_owned(),
             to: to.to_owned(),
@@ -228,7 +228,7 @@ mod tests {
     use std::fs::{self, File};
     use std::io::prelude::*;
     use std::panic;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     // Run a test with given setup before the test and teardown after the test.
     // Should ensure that setup and teardown code does not panic
@@ -252,7 +252,7 @@ mod tests {
     }
 
     impl RenameTestSetup {
-        fn with_temp_dir(d: &str) -> RenameTestSetup {
+        fn with_temp_dir(d: &str) -> Self {
             let mut temp_path = env::temp_dir();
             temp_path.push(d);
             RenameTestSetup {
@@ -261,8 +261,10 @@ mod tests {
             }
         }
 
-        fn init(&self) -> &RenameTestSetup {
-            fs::remove_dir_all(&self.dir).unwrap();
+        fn init(self) -> Self {
+            if Path::new(&self.dir).exists() {
+                fs::remove_dir_all(&self.dir).unwrap();
+            }
             fs::create_dir(&self.dir).unwrap();
             self
         }
@@ -274,7 +276,7 @@ mod tests {
             temp_path
         }
 
-        fn add_file(&mut self, file: &str, contents: &str) -> &mut RenameTestSetup {
+        fn add_file(mut self, file: &str, contents: &str) -> Self {
             let file_path = self.full_path(file);
             match fs::write(&file_path, contents) {
                 Ok(_) => self.file_contents.push((
@@ -300,10 +302,10 @@ mod tests {
 
     #[test]
     fn rename_swap_test() {
-        let mut setup = RenameTestSetup::with_temp_dir("rename_test");
-        setup.init();
-        setup.add_file("A.txt", "hello");
-        setup.add_file("B.txt", "hi");
+        let setup = RenameTestSetup::with_temp_dir("rename_test")
+            .init()
+            .add_file("A.txt", "hello")
+            .add_file("B.txt", "hi");
 
         println!("Files: {:?}", setup.file_contents);
 

@@ -51,7 +51,7 @@ impl RenameOp {
         filter_dirs: bool,
         is_demo: bool,
         sorting: Option<SortOption>,
-    ) -> RenameOp {
+    ) -> Self {
         RenameOp {
             is_demo,
             rename_type: RenameType::Directory {
@@ -64,7 +64,7 @@ impl RenameOp {
         }
     }
 
-    pub fn from_stdin(editor: &str, is_demo: bool, sorting: Option<SortOption>) -> RenameOp {
+    pub fn from_stdin(editor: &str, is_demo: bool, sorting: Option<SortOption>) -> Self {
         RenameOp {
             is_demo,
             rename_type: RenameType::StdinInput {
@@ -74,12 +74,7 @@ impl RenameOp {
         }
     }
 
-    pub fn from_left(
-        file: &str,
-        editor: &str,
-        is_demo: bool,
-        sorting: Option<SortOption>,
-    ) -> RenameOp {
+    pub fn from_left(file: &str, editor: &str, is_demo: bool, sorting: Option<SortOption>) -> Self {
         RenameOp {
             is_demo,
             rename_type: RenameType::LeftFile {
@@ -90,7 +85,7 @@ impl RenameOp {
         }
     }
 
-    pub fn from_compare(left: &str, right: &str, is_demo: bool) -> RenameOp {
+    pub fn from_compare(left: &str, right: &str, is_demo: bool) -> Self {
         RenameOp {
             is_demo,
             rename_type: RenameType::FileCompare {
